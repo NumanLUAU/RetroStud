@@ -33,6 +33,19 @@ SHARED_DIR = os.path.join(BASE_DIR, "shared")
 WEB_START_BAT = os.path.join(BASE_DIR, "Webserver", "Start.bat")
 WEB_KILL_BAT = os.path.join(BASE_DIR, "Webserver", "Kill.bat")
 SETTINGS_DIR = os.path.join(BASE_DIR, "Settings")
+PLACEIDS_DIR = os.path.join("Settings", "PlaceIDs")
+WEBSERVER_PLACEIDS = os.path.join(
+    "Webserver",
+    "www",
+    "asset",
+    "placeids.txt"
+)
+WEBSERVER_COOKIE = os.path.join(
+    "Webserver",
+    "www",
+    "asset",
+    "assetdelivery_cookie.txt"
+)
 
 # Launch webserver ONCE
 webserver_proc = None
@@ -711,6 +724,26 @@ def read_appearance():
     data = re.sub(r"\s+", ";", data)
     return data
 
+def sync_placeids_to_webserver(placeids_file):
+    try:
+        os.makedirs(os.path.dirname(WEBSERVER_PLACEIDS), exist_ok=True)
+
+        if os.path.exists(placeids_file):
+            shutil.copyfile(placeids_file, WEBSERVER_PLACEIDS)
+
+    except Exception as e:
+        print("Failed to sync PlaceIDs:", e)
+
+def sync_cookie_to_webserver(cookie_file):
+    try:
+        os.makedirs(os.path.dirname(WEBSERVER_COOKIE), exist_ok=True)
+
+        if os.path.exists(cookie_file):
+            shutil.copyfile(cookie_file, WEBSERVER_COOKIE)
+
+    except Exception as e:
+        print("Failed to sync cookie:", e)
+
 def build_app_arg():
     appearance = read_appearance()
     body_colors = read_body_colors()
@@ -798,9 +831,16 @@ def copy_map(file_path):
     save_setting("MapPath.txt", file_path)
 
 def select_map():
-    file_path = filedialog.askopenfilename(title="Select Roblox Map", filetypes=[("Roblox files", "*.rbxl")])
-    if file_path:
-        copy_map(file_path)
+    file_path = filedialog.askopenfilename(
+        title="Select Roblox Map",
+        filetypes=[("Roblox files", "*.rbxl")]
+    )
+
+    if not file_path:
+        return None
+
+    copy_map(file_path)
+    return file_path
 
 def launch_server(client_version):
     global server_proc
@@ -1129,64 +1169,247 @@ def launch_client(client_version):
 
     subprocess.Popen(cmd, shell=True)
 
+def get_placeids_file(map_path):
+    filename = os.path.basename(map_path)
+    os.makedirs(PLACEIDS_DIR, exist_ok=True)
+    return os.path.join(
+        PLACEIDS_DIR,
+        f"PlaceIDs of {filename}.txt"
+    )
+
+
+def placeids_editor(placeids_file, preload=None):
+    win = ctk.CTkToplevel()
+    win.title("Insert PlaceIDs of game (From Roblox)")
+    win.geometry("500x350")
+    win.grab_set()
+
+    ctk.CTkLabel(
+        win,
+        text="Insert PlaceIDs of game (From Roblox)"
+    ).pack(pady=(10,5))
+
+    textbox = ctk.CTkTextbox(
+        win,
+        width=450,
+        height=220
+    )
+    textbox.pack(padx=10, pady=5, fill="both", expand=True)
+
+    if preload is not None:
+        textbox.insert("1.0", preload)
+    else:
+        textbox.insert(
+            "1.0",
+            """123456789
+987654321
+456123789
+741852963
+258369147"""
+        )
+
+    def save():
+        os.makedirs(PLACEIDS_DIR, exist_ok=True)
+
+        with open(placeids_file, "w", encoding="utf-8") as f:
+            f.write(textbox.get("1.0", "end").strip())
+
+        sync_placeids_to_webserver(placeids_file)
+
+        win.destroy()
+
+    ctk.CTkButton(
+        win,
+        text="Save",
+        command=save
+    ).pack(pady=10)
+
+def check_placeids(map_path):
+    placeids_file = get_placeids_file(map_path)
+
+    if os.path.exists(placeids_file):
+        sync_placeids_to_webserver(placeids_file)
+        return
+
+    placeids_editor(placeids_file)
+
+def change_placeids():
+    try:
+        with open("Settings/MapPath.txt", "r", encoding="utf-8") as f:
+            map_path = f.read().strip()
+
+        if not map_path:
+            return
+
+    except:
+        return
+
+    placeids_file = get_placeids_file(map_path)
+
+    preload = None
+
+    if os.path.exists(placeids_file):
+        with open(placeids_file, "r", encoding="utf-8") as f:
+            preload = f.read()
+
+    placeids_editor(placeids_file, preload)
+
+def load_cookie_dialog():
+    win = ctk.CTkToplevel()
+    win.title("Load Cookie")
+    win.geometry("550x300")
+    win.grab_set()
+
+    ctk.CTkLabel(
+        win,
+        text="Input your .ROBLOSECURITY cookie.\n\n(Recommended to use an alt account.)"
+    ).pack(pady=(10,5))
+
+    textbox = ctk.CTkTextbox(
+        win,
+        width=500,
+        height=160
+    )
+    textbox.pack(padx=10, pady=5, fill="both", expand=True)
+
+    cookie_file = os.path.join(
+        "Settings",
+        "assetdelivery_cookie.txt"
+    )
+
+    if os.path.exists(cookie_file):
+        with open(cookie_file, "r", encoding="utf-8") as f:
+            textbox.insert("1.0", f.read())
+
+        sync_cookie_to_webserver(cookie_file)
+
+    def save():
+        os.makedirs("Settings", exist_ok=True)
+
+        with open(cookie_file, "w", encoding="utf-8") as f:
+            f.write(textbox.get("1.0", "end").strip())
+
+        sync_cookie_to_webserver(cookie_file)
+
+        win.destroy()
+    
+    ctk.CTkButton(
+        win,
+        text="Save",
+        command=save
+    ).pack(pady=10)
+
 # ---- GUI ----
-ctk.set_appearance_mode("Dark")  # "Dark" or "Light"
-ctk.set_default_color_theme("blue")  # "blue", "green", "dark-blue"
+ctk.set_appearance_mode("Dark")
+ctk.set_default_color_theme("blue")
 
 # --- Root window ---
 root = ctk.CTk()
 root.title("RetroStud")
 icon_path = resource_path("Logo.ico")
 root.iconbitmap(icon_path)
-root.geometry("360x750")
+root.geometry("780x580")
 root.resizable(False, False)
 
-# --- Frames ---
-top_frame = ctk.CTkFrame(root, corner_radius=10)
-top_frame.pack(padx=10, pady=10, fill="x")
+# ==========================================================
+# MAIN LAYOUT
+# ==========================================================
 
-config_frame = ctk.CTkFrame(root, corner_radius=10)
-config_frame.pack(padx=10, pady=5, fill="x")
+main_frame = ctk.CTkFrame(root, fg_color="transparent")
+main_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-actions_frame = ctk.CTkFrame(root, corner_radius=10)
-actions_frame.pack(padx=10, pady=10, fill="x")
+left_frame = ctk.CTkFrame(main_frame, corner_radius=10)
+left_frame.pack(side="left", fill="both", expand=True, padx=(0,5))
 
-# --- Client Version ---
-ctk.CTkLabel(top_frame, text="Client:", anchor="w").pack(fill="x", pady=(5,2))
+right_frame = ctk.CTkFrame(main_frame, corner_radius=10)
+right_frame.pack(side="right", fill="both", expand=True, padx=(5,0))
+
+bottom_frame = ctk.CTkFrame(root, corner_radius=10)
+bottom_frame.pack(fill="x", padx=10, pady=(0,10))
+
+# ==========================================================
+# LEFT SIDE
+# ==========================================================
+
+ctk.CTkLabel(
+    left_frame,
+    text="Client Configuration",
+    font=ctk.CTkFont(size=18, weight="bold")
+).pack(anchor="w", padx=10, pady=(10,5))
+
+# ---------------- Client Version ----------------
+
+ctk.CTkLabel(left_frame, text="Client Version").pack(anchor="w", padx=10)
+
 client_var = ctk.StringVar()
-clients = [d for d in os.listdir(CLIENTS_DIR) if os.path.isdir(os.path.join(CLIENTS_DIR, d))]
-client_dropdown = ctk.CTkComboBox(top_frame, variable=client_var, values=clients)
-client_dropdown.pack(fill="x", pady=(0,5))
 
-# --- Configuration ---
-ctk.CTkLabel(config_frame, text="Configuration:", anchor="w").pack(fill="x", pady=(5,2))
+clients = [
+    d for d in os.listdir(CLIENTS_DIR)
+    if os.path.isdir(os.path.join(CLIENTS_DIR, d))
+]
 
-ctk.CTkLabel(config_frame, text="IP:", anchor="w").pack(fill="x", pady=(5,0))
-ip_var = ctk.StringVar(value=read_setting("ip.txt", "localhost"))
+client_dropdown = ctk.CTkComboBox(
+    left_frame,
+    variable=client_var,
+    values=clients
+)
+client_dropdown.pack(fill="x", padx=10, pady=(0,8))
+
+# ---------------- IP ----------------
+
+ctk.CTkLabel(left_frame, text="IP").pack(anchor="w", padx=10)
+
+ip_var = ctk.StringVar(
+    value=read_setting("ip.txt", "localhost")
+)
+
 def on_ip_change(*args):
     save_setting("ip.txt", ip_var.get())
 
 ip_var.trace_add("write", on_ip_change)
 
-ctk.CTkEntry(config_frame, textvariable=ip_var).pack(fill="x", pady=(0,2))
+ctk.CTkEntry(
+    left_frame,
+    textvariable=ip_var
+).pack(fill="x", padx=10, pady=(0,8))
 
-ctk.CTkLabel(config_frame, text="Port:", anchor="w").pack(fill="x", pady=(5,0))
+# ---------------- Port ----------------
 
-port_var = ctk.StringVar(value=read_setting("clientport.txt", "2005"))
+ctk.CTkLabel(left_frame, text="Port").pack(anchor="w", padx=10)
+
+port_var = ctk.StringVar(
+    value=read_setting("clientport.txt", "2005")
+)
+
 def on_port_change(*args):
     save_port_files(port_var.get())
 
 port_var.trace_add("write", on_port_change)
 
-ctk.CTkEntry(config_frame, textvariable=port_var).pack(fill="x", pady=(0,2))
+ctk.CTkEntry(
+    left_frame,
+    textvariable=port_var
+).pack(fill="x", padx=10, pady=(0,8))
 
-ctk.CTkLabel(config_frame, text="Username:", anchor="w").pack(fill="x", pady=(5,0))
-username_var = ctk.StringVar(value=read_setting("username.txt", "Player"))
+# ---------------- Username ----------------
+
+ctk.CTkLabel(left_frame, text="Username").pack(anchor="w", padx=10)
+
+username_var = ctk.StringVar(
+    value=read_setting("username.txt", "Player")
+)
+
 def on_name_change(*args):
     save_setting("username.txt", username_var.get())
 
 username_var.trace_add("write", on_name_change)
-ctk.CTkEntry(config_frame, textvariable=username_var).pack(fill="x", pady=(0,2))
+
+ctk.CTkEntry(
+    left_frame,
+    textvariable=username_var
+).pack(fill="x", padx=10, pady=(0,8))
+
+# ---------------- Filtering Enabled ----------------
 
 FE_var = ctk.StringVar(value=load_FE_type())
 AS_var = ctk.StringVar(value=load_AS_type())
@@ -1199,36 +1422,155 @@ def on_AS_change(*args):
     os.makedirs(os.path.join("Settings", "assetsaving"), exist_ok=True)
     save_AS_type(AS_var.get())
 
-# Trace changes instead of bind
 FE_var.trace_add("write", on_FE_change)
 AS_var.trace_add("write", on_AS_change)
 
-ctk.CTkLabel(config_frame, text="Filtering Enabled:", anchor="w").pack(fill="x", pady=(5,0))
-FE_type_dropdown = ctk.CTkComboBox(config_frame, variable=FE_var, values=["true", "false"])
-FE_type_dropdown.pack(fill="x", pady=(0,5))
+ctk.CTkLabel(left_frame, text="Filtering Enabled").pack(anchor="w", padx=10)
 
-ctk.CTkLabel(config_frame, text="Asset Saving:", anchor="w").pack(fill="x", pady=(5,0))
-AS_type_dropdown = ctk.CTkComboBox(config_frame, variable=AS_var, values=["true", "false"])
-AS_type_dropdown.pack(fill="x", pady=(0,5))
+FE_type_dropdown = ctk.CTkComboBox(
+    left_frame,
+    variable=FE_var,
+    values=["true", "false"]
+)
+FE_type_dropdown.pack(fill="x", padx=10, pady=(0,8))
 
-# --- Body Type ---
+# ---------------- Asset Saving ----------------
+
+ctk.CTkLabel(left_frame, text="Asset Saving").pack(anchor="w", padx=10)
+
+AS_type_dropdown = ctk.CTkComboBox(
+    left_frame,
+    variable=AS_var,
+    values=["true", "false"]
+)
+AS_type_dropdown.pack(fill="x", padx=10, pady=(0,8))
+
+# ---------------- Body Type ----------------
+
 body_type_var = ctk.StringVar(value=load_body_type())
+
 def on_body_type_change(event=None):
     save_body_type(body_type_var.get())
 
-ctk.CTkLabel(config_frame, text="Body Type:", anchor="w").pack(fill="x", pady=(5,0))
-body_type_dropdown = ctk.CTkComboBox(config_frame, variable=body_type_var, values=["R6", "R15"])
-body_type_dropdown.pack(fill="x", pady=(0,5))
+ctk.CTkLabel(left_frame, text="Body Type").pack(anchor="w", padx=10)
+
+body_type_dropdown = ctk.CTkComboBox(
+    left_frame,
+    variable=body_type_var,
+    values=["R6", "R15"]
+)
+body_type_dropdown.pack(fill="x", padx=10, pady=(0,10))
 body_type_dropdown.bind("<<ComboboxSelected>>", on_body_type_change)
 
-# --- Map & Avatar buttons ---
-ctk.CTkButton(config_frame, text="Select Map", command=select_map).pack(fill="x", pady=(3,3))
-ctk.CTkButton(config_frame, text="Edit Map", command=edit_map).pack(fill="x", pady=(3,3))
-ctk.CTkButton(config_frame, text="Avatar Editor", command=open_body_color_changer).pack(fill="x", pady=(3,5))
+# ==========================================================
+# RIGHT SIDE
+# ==========================================================
 
-# --- Actions ---
-ctk.CTkLabel(actions_frame, text="Actions:", anchor="w").pack(fill="x", pady=(5,2))
-ctk.CTkButton(actions_frame, text="Launch Server", command=lambda: launch_server(client_var.get())).pack(fill="x", pady=3)
-ctk.CTkButton(actions_frame, text="Launch Client", command=lambda: launch_client(client_var.get())).pack(fill="x", pady=3)
+map_frame = ctk.CTkFrame(right_frame)
+map_frame.pack(fill="x", padx=10, pady=(10,5))
+
+ctk.CTkLabel(
+    map_frame,
+    text="Map",
+    font=ctk.CTkFont(size=16, weight="bold")
+).pack(anchor="w", padx=10, pady=(10,5))
+
+current_map_var = ctk.StringVar(value="No map selected")
+
+ctk.CTkLabel(
+    map_frame,
+    text="Current Map:"
+).pack(anchor="w", padx=10)
+
+ctk.CTkLabel(
+    map_frame,
+    textvariable=current_map_var,
+    wraplength=250
+).pack(anchor="w", padx=10, pady=(0,8))
+
+change_placeids_button = ctk.CTkButton(
+    map_frame,
+    text="Change PlaceIDs",
+    state="disabled",
+    command=change_placeids
+)
+
+def select_map_gui():
+    path = select_map()
+
+    if path is None:
+        return
+
+    current_map_var.set(os.path.basename(path))
+    change_placeids_button.configure(state="normal")
+    check_placeids(path)
+
+ctk.CTkButton(
+    map_frame,
+    text="Load Map",
+    command=select_map_gui
+).pack(fill="x", padx=10, pady=3)
+
+ctk.CTkButton(
+    map_frame,
+    text="Edit Map",
+    command=edit_map
+).pack(fill="x", padx=10, pady=3)
+
+change_placeids_button.pack(fill="x", padx=10, pady=(3,10))
+
+# ==========================================================
+# ROBLOX
+# ==========================================================
+
+roblox_frame = ctk.CTkFrame(right_frame)
+roblox_frame.pack(fill="x", padx=10, pady=5)
+
+ctk.CTkLabel(
+    roblox_frame,
+    text="Roblox",
+    font=ctk.CTkFont(size=16, weight="bold")
+).pack(anchor="w", padx=10, pady=(10,5))
+
+ctk.CTkButton(
+    roblox_frame,
+    text="Load Cookie",
+    command=load_cookie_dialog
+).pack(fill="x", padx=10, pady=(0,10))
+
+# ==========================================================
+# AVATAR
+# ==========================================================
+
+avatar_frame = ctk.CTkFrame(right_frame)
+avatar_frame.pack(fill="x", padx=10, pady=5)
+
+ctk.CTkLabel(
+    avatar_frame,
+    text="Avatar",
+    font=ctk.CTkFont(size=16, weight="bold")
+).pack(anchor="w", padx=10, pady=(10,5))
+
+ctk.CTkButton(
+    avatar_frame,
+    text="Avatar Editor",
+    command=open_body_color_changer
+).pack(fill="x", padx=10, pady=(0,10))
+
+# ==========================================================
+# BOTTOM BUTTONS
+# ==========================================================
+
+ctk.CTkButton(
+    bottom_frame,
+    text="Launch Server",
+    command=lambda: launch_server(client_var.get())
+).pack(side="left", expand=True, fill="x", padx=(10,5), pady=10)
+
+ctk.CTkButton(
+    bottom_frame,
+    text="Launch Client",
+    command=lambda: launch_client(client_var.get())
+).pack(side="left", expand=True, fill="x", padx=(5,10), pady=10)
 
 root.mainloop()
